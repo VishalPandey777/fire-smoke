@@ -65,6 +65,37 @@ psutil.cpu_percent(interval=None)
 # ---------------------------------------------------------------------------
 RTSP_STREAMS = [
   #enter your rtsp streams
+  "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=2&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=3&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=4&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=5&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=6&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=7&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=8&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=9&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=10&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=11&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=12&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=13&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=14&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=15&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=16&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=17&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=18&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=19&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=20&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=21&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=22&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=23&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=24&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=25&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=26&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=27&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=28&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=29&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=30&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=31&subtype=0",
+    "rtsp://admin:admin%40123@103.245.34.90:554/cam/realmonitor?channel=32&subtype=0",
 ]
 
 POLL_INTERVAL_SECONDS = 10
@@ -227,12 +258,13 @@ class SemanticEmbedder:
         smoke_sims = util.cos_sim(caption_emb, self.smoke_embeddings)[0]
         return float(torch.max(fire_sims)), float(torch.max(smoke_sims))
 
-# ---------------------------------------------------------------------------
+## ---------------------------------------------------------------------------
 # Background RTSP Reader
 # ---------------------------------------------------------------------------
 _shutdown_event = threading.Event()
 
 class RTSPFrameGrabber:
+
     def __init__(self, url: str):
         self._url = url
         self._frame = None
@@ -246,23 +278,45 @@ class RTSPFrameGrabber:
     def stop(self):
         self._running = False
 
-    def get_latest_frame(self) -> Optional[np.ndarray]:
+    def get_latest_frame(self):
+
         with self._lock:
-            return self._frame.copy() if self._frame is not None else None
+
+            if self._frame is None:
+                return None
+
+            return self._frame.copy()
 
     def _loop(self):
+
         while self._running and not _shutdown_event.is_set():
+
+            logger.info(f"Connecting : {self._url}")
+
             cap = cv2.VideoCapture(self._url, cv2.CAP_FFMPEG)
+
             if not cap.isOpened():
+                logger.warning(f"Failed to connect : {self._url}")
                 time.sleep(2)
                 continue
+
+            logger.info(f"Connected : {self._url}")
+
             while self._running and not _shutdown_event.is_set():
+
                 ret, frame = cap.read()
+
                 if not ret:
+                    logger.warning(f"Stream Lost : {self._url}")
                     break
+
                 with self._lock:
-                    self._frame = frame
+                    self._frame = frame.copy()
+
             cap.release()
+
+            logger.info("Reconnecting...")
+            time.sleep(1)
 
 # ---------------------------------------------------------------------------
 # Pipeline Orchestrator
@@ -283,26 +337,24 @@ class SemanticPipeline:
         os.makedirs(PASSED_DIR, exist_ok=True)
         os.makedirs(REJECTED_DIR, exist_ok=True)
 
-    def process_camera(self, cam_idx: int, stream_url: str):
+    def process_camera(self, cam_idx: int, grabber: RTSPFrameGrabber):
         logger.info(f"\nCapturing from Camera {cam_idx + 1}...")
-
-        # 0. Frame Grab Timing
+        # ------------------------------------------------------------------
+# 0. Get Latest Frame From Persistent RTSP Grabber
+# ------------------------------------------------------------------
         t_start_frame = time.perf_counter()
-        cap = cv2.VideoCapture(stream_url)
-        if not cap.isOpened():
-            logger.error(f"Failed to open stream for Camera {cam_idx + 1}")
-            return
-            
-        ret, frame = cap.read()
-        cap.release()
+
+        frame = grabber.get_latest_frame()
+
         t_end_frame = time.perf_counter()
         frame_read_ms = (t_end_frame - t_start_frame) * 1000.0
 
-        if not ret:
-            logger.error(f"Failed to read frame from Camera {cam_idx + 1}")
+        if frame is None:
+            logger.warning(f"No frame available yet for Camera {cam_idx + 1}")
             return
 
         annotated_frame = frame.copy()
+
 
         # 1. YOLO Detection
         t_start_yolo = time.perf_counter()
@@ -388,8 +440,10 @@ class SemanticPipeline:
 # Execution Entry Point
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
+
     def sig_handler(signum, frame):
         _shutdown_event.set()
+
     signal.signal(signal.SIGINT, sig_handler)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -405,33 +459,91 @@ if __name__ == "__main__":
         print(" WARNING: CUDA NOT DETECTED! Running on CPU in FP32.")
     print("=" * 65)
 
-    yolo = YOLOVerifier(model_path=YOLO_MODEL_PATH, conf_threshold=YOLO_CONF_THRESHOLD, device=device)
+    # ------------------------------------------------------------
+    # Load Models
+    # ------------------------------------------------------------
+    yolo = YOLOVerifier(
+        model_path=YOLO_MODEL_PATH,
+        conf_threshold=YOLO_CONF_THRESHOLD,
+        device=device,
+    )
+
     vlm = FlorenceVLM(device=device)
-    embedder = SemanticEmbedder(fire_phrases=FIRE_PHRASES, smoke_phrases=SMOKE_PHRASES, device=device)
+
+    embedder = SemanticEmbedder(
+        fire_phrases=FIRE_PHRASES,
+        smoke_phrases=SMOKE_PHRASES,
+        device=device,
+    )
+
     csv_logger = CSVLogger(filepath=CSV_FILE)
 
-    pipeline = SemanticPipeline(yolo=yolo, vlm=vlm, embedder=embedder, csv_logger=csv_logger)
+    pipeline = SemanticPipeline(
+        yolo=yolo,
+        vlm=vlm,
+        embedder=embedder,
+        csv_logger=csv_logger,
+    )
 
     logger.info("Starting Semantic Fire & Smoke Testing Pipeline...")
 
+    # ------------------------------------------------------------
+    # Create Persistent RTSP Grabbers (ONLY ONCE)
+    # ------------------------------------------------------------
+    grabbers = []
+
+    for url in RTSP_STREAMS:
+        grabber = RTSPFrameGrabber(url)
+        grabber.start()
+        grabbers.append(grabber)
+
+    logger.info("Waiting 5 seconds for RTSP streams to warm up...")
+    time.sleep(5)
+
+    # ------------------------------------------------------------
+    # Main Loop
+    # ------------------------------------------------------------
     try:
+
         while not _shutdown_event.is_set():
-            logger.info("--- Starting new polling cycle at %s ---", datetime.now().strftime("%H:%M:%S"))
-            for cam_idx, stream_url in enumerate(RTSP_STREAMS):
+
+            logger.info(
+                "--- Starting new polling cycle at %s ---",
+                datetime.now().strftime("%H:%M:%S"),
+            )
+
+            for cam_idx, grabber in enumerate(grabbers):
+
                 if _shutdown_event.is_set():
                     break
-                pipeline.process_camera(cam_idx, stream_url)
+
+                pipeline.process_camera(cam_idx, grabber)
 
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-            logger.info("Sleeping for %d seconds...", POLL_INTERVAL_SECONDS)
+            logger.info(
+                "Sleeping for %d seconds...",
+                POLL_INTERVAL_SECONDS,
+            )
+
             for _ in range(POLL_INTERVAL_SECONDS):
+
                 if _shutdown_event.is_set():
                     break
+
                 time.sleep(1)
 
     except KeyboardInterrupt:
         logger.info("Processing interrupted by user.")
+
     finally:
+
+        logger.info("Stopping RTSP Grabbers...")
+
+        _shutdown_event.set()
+
+        for grabber in grabbers:
+            grabber.stop()
+
         logger.info("Pipeline shut down cleanly.")
