@@ -1,58 +1,356 @@
 # fire-smoke
-For each camera, every polling cycle:
+# Semantic Fire & Smoke Verification Pipeline
 
-Frame capture — ffmpeg connects to the camera's RTSP stream and pulls a single frame back as a JPEG.
-YOLO detection — the frame is run through a custom-trained YOLO model (me (1).pt). Any box above the confidence threshold moves to the next stage.
-Florence-2 captioning — for each qualifying box, the full frame is captioned by Florence-2 (<DETAILED_CAPTION> prompt), producing a natural language description of the scene.
-Semantic verification — the caption is embedded with all-MiniLM-L6-v2 and compared (cosine similarity) against two banks of reference phrases (FIRE_PHRASES, SMOKE_PHRASES). If either max similarity clears SIMILARITY_THRESHOLD, the detection is accepted.
-Decision — PASS detections (real fire/smoke) and REJECT detections (YOLO false positives Florence didn't confirm) are saved to separate folders with the box drawn on the frame, and every detection is logged to a CSV.
-Requirements
-bash
-pip install ultralytics transformers sentence-transformers opencv-python-headless pillow psutil
+## Overview
 
-ffmpeg must also be installed and on PATH (used for RTSP frame capture). Colab ships with it already; elsewhere:
+This project implements a two-stage AI pipeline for industrial fire and smoke detection using RTSP camera streams.
 
-bash
-apt-get install -y ffmpeg
+The pipeline combines:
 
-A CUDA GPU is strongly recommended — Florence-2 in particular is slow on CPU.
+- YOLO for real-time object detection
+- Microsoft Florence-2 Large Vision Language Model (VLM) for scene understanding
+- SentenceTransformer semantic similarity verification
 
-Configuration
+The objective is to reduce false positives by validating YOLO detections using natural language scene descriptions instead of relying solely on object detection confidence.
 
-All of the following are constants near the top of the script:
+---
 
-Constant	Purpose
-RTSP_STREAMS	List of camera RTSP URLs to poll
-POLL_INTERVAL_SECONDS	Delay between full sweeps of all cameras
-YOLO_MODEL_PATH	Path to the trained YOLO weights file
-YOLO_CONF_THRESHOLD	Minimum YOLO confidence to trigger Florence verification
-SIMILARITY_THRESHOLD	Minimum cosine similarity (fire or smoke) to accept a detection
-FIRE_PHRASES / SMOKE_PHRASES	Reference phrases the caption is compared against
-FFMPEG_CAPTURE_TIMEOUT_SECONDS	Max time to wait for ffmpeg to connect + return a frame
-Output
-semantic_passed/ — annotated frames for confirmed fire/smoke events
-semantic_rejected/ — annotated frames YOLO flagged but Florence didn't confirm
-semantic_results.csv — one row per YOLO detection, with class, confidence, caption, similarity scores, decision, and per-stage timing
-Running it
-bash
-python semantic_pipeline.py
+# Pipeline Architecture
 
-Runs until interrupted (Ctrl+C), sweeping all cameras once per POLL_INTERVAL_SECONDS.
+```
+                RTSP Camera Stream
+                        │
+                        ▼
+                 Read Current Frame
+                        │
+                        ▼
+                YOLO Fire/Smoke Detector
+                        │
+             Detection Above Threshold?
+                │                 │
+               No                Yes
+                │                 ▼
+             Skip Frame     Florence-2 Caption
+                                  │
+                                  ▼
+                     Sentence Embedding Model
+                                  │
+                                  ▼
+                  Semantic Similarity Matching
+                 (Fire / Smoke Trigger Phrases)
+                                  │
+                                  ▼
+                     PASS / REJECT Decision
+                                  │
+                 ┌────────────────┴──────────────┐
+                 ▼                               ▼
+          Save Image                     Log Results
+```
 
-Notes on frame capture
+---
 
-RTSP reading goes through the ffmpeg binary directly rather than cv2.VideoCapture:
+# Features
 
-ffmpeg -rtsp_transport tcp -fflags nobuffer -flags low_delay \
-       -i <url> -an -frames:v 1 -f image2 -vcodec mjpeg -q:v 3 pipe:1
+- Supports multiple RTSP camera streams
+- YOLO-based fire and smoke detection
+- Florence-2 scene caption generation
+- Semantic verification using SentenceTransformer
+- Automatic PASS / REJECT decision
+- CSV logging of every prediction
+- Resource monitoring
+    - CPU Usage
+    - RAM Usage
+    - GPU VRAM
+- Saves annotated images
+- Detailed timing statistics for every pipeline stage
 
-The frame comes back as a single JPEG on stdout and is decoded with cv2.imdecode — no ffprobe step, no raw-video/resolution handling. That matters here specifically because these cameras have a slow RTSP handshake (10+ seconds observed); adding a second connection (e.g. for probing resolution) roughly doubles per-camera latency and risks the timeout. If a camera doesn't respond in time or returns a corrupt/partial frame, that camera is skipped for the cycle rather than raising — check the log for ffmpeg timed out / Failed to read frame warnings if a specific camera is consistently unreachable.
+---
 
-Memory management
+# Components
 
-torch.cuda.empty_cache() and gc.collect() run after every camera's processing (not just once per full sweep), to keep VRAM from creeping up over a long-running, many-camera session.
+## 1. YOLO Detector
 
-Known limitations / next steps
-Cameras are polled sequentially, one at a time. With 31 cameras and a YOLO + Florence pass per detection, a cycle can take a while — if POLL_INTERVAL_SECONDS is too short for the number of cameras, cycles will effectively run back-to-back.
-Florence-2 captions the full frame, not the cropped detection box. Cropping to the box before captioning would likely be faster and more precise, at the cost of losing surrounding context.
-Each RTSP connection is opened fresh every cycle. If the camera handshake time becomes the dominant cost, a persistent background-thread frame grabber (one long-lived connection per camera, always holding the latest frame) would remove that wait entirely — this is a bigger architectural change than the current single-shot-per-cycle design.
+Responsible for detecting:
+
+- Fire
+- Smoke
+
+Only detections above the configured confidence threshold are processed further.
+
+Configuration:
+
+```python
+YOLO_CONF_THRESHOLD = 0.35
+```
+
+---
+
+## 2. Florence-2 Large
+
+Generates a detailed caption describing the current camera scene.
+
+Example:
+
+```
+A factory floor with dense black smoke rising from machinery.
+```
+
+---
+
+## 3. Semantic Verification
+
+The generated caption is compared against predefined fire and smoke phrases using SentenceTransformer.
+
+Fire trigger examples:
+
+- visible flames
+- industrial fire
+- burning machinery
+- active combustion
+
+Smoke trigger examples:
+
+- dense smoke
+- heavy smoke
+- smoke plume
+- black smoke
+
+The maximum cosine similarity is used for verification.
+
+---
+
+## Decision Logic
+
+```
+if
+
+Fire Similarity >= Threshold
+
+OR
+
+Smoke Similarity >= Threshold
+
+↓
+
+PASS
+
+Else
+
+↓
+
+REJECT
+```
+
+Similarity threshold:
+
+```python
+SIMILARITY_THRESHOLD = 0.5
+```
+
+---
+
+# Folder Structure
+
+```
+project/
+
+│
+├── semantic_passed/
+│      Verified detections
+│
+├── semantic_rejected/
+│      Rejected detections
+│
+├── semantic_results.csv
+│
+├── main.py
+│
+└── YOLO Model
+```
+
+---
+
+# Output
+
+## Annotated Images
+
+Bounding boxes are drawn around detected objects.
+
+Green Box
+
+```
+PASS
+```
+
+Red Box
+
+```
+REJECT
+```
+
+---
+
+## CSV Output
+
+Each processed detection contains:
+
+- Camera ID
+- YOLO Class
+- YOLO Confidence
+- Florence Caption
+- Fire Similarity
+- Smoke Similarity
+- Decision
+- Timestamp
+- Frame Read Time
+- YOLO Inference Time
+- Florence Time
+- Embedding Time
+- Total Pipeline Time
+- CPU Usage
+- RAM Usage
+- VRAM Usage
+
+---
+
+# Performance Metrics
+
+The following timing statistics are recorded:
+
+- RTSP Frame Read
+- YOLO Inference
+- Florence Caption Generation
+- Sentence Embedding
+- Total Pipeline Time
+
+System metrics include:
+
+- CPU Utilization
+- Python Process RAM
+- Total System RAM
+- GPU VRAM Allocation
+
+---
+
+# Requirements
+
+Python 3.10+
+
+Install dependencies:
+
+```bash
+pip install ultralytics
+pip install transformers==4.41.2
+pip install sentence-transformers
+pip install opencv-python-headless
+pip install pillow
+pip install psutil
+```
+
+---
+
+# Configuration
+
+Edit the following variables:
+
+```python
+RTSP_STREAMS
+```
+
+Add all RTSP camera URLs.
+
+---
+
+YOLO model
+
+```python
+YOLO_MODEL_PATH
+```
+
+---
+
+Detection threshold
+
+```python
+YOLO_CONF_THRESHOLD
+```
+
+---
+
+Semantic threshold
+
+```python
+SIMILARITY_THRESHOLD
+```
+
+---
+
+Polling interval
+
+```python
+POLL_INTERVAL_SECONDS
+```
+
+---
+
+# Current Processing Flow
+
+Every polling cycle:
+
+```
+For each camera
+
+↓
+
+Open RTSP stream
+
+↓
+
+Read one frame
+
+↓
+
+Close stream
+
+↓
+
+Run YOLO
+
+↓
+
+Generate Florence caption
+
+↓
+
+Semantic similarity verification
+
+↓
+
+PASS / REJECT
+
+↓
+
+Save image
+
+↓
+
+Log CSV
+```
+
+---
+
+# Future Improvements
+
+- Persistent FFmpeg-based RTSP streaming to eliminate repeated connection overhead.
+- Continuous frame buffering with latest-frame retrieval.
+- Quantized Florence model for faster inference.
+- Region-of-interest (ROI) caption generation instead of full-frame captioning.
+- Asynchronous pipeline execution for higher throughput.
+- Batch processing across multiple camera streams.
+- Automatic RTSP reconnection and health monitoring.
+
+---
+
+# License
+
+This project is intended for research, industrial AI deployment, and intelligent fire & smoke monitoring systems.
