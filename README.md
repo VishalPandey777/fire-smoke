@@ -171,24 +171,8 @@ project/
 ---
 
 # Output
+ Rejected Or Accepted
 
-## Annotated Images
-
-Bounding boxes are drawn around detected objects.
-
-Green Box
-
-```
-PASS
-```
-
-Red Box
-
-```
-REJECT
-```
-
----
 
 ## CSV Output
 
