@@ -6,23 +6,24 @@ The pipeline keeps all RTSP streams alive in memory and processes the latest fra
 
 ## Pipeline
 
-RTSP Cameras
-        ↓
-Persistent RTSP Reader
-        ↓
-Latest Frame in Memory
-        ↓
-YOLO Fire & Smoke Detection
-        ↓
-Florence-2 Scene Captioning
-        ↓
-Sentence Similarity Verification
-        ↓
-PASS / REJECT Decision
-        ↓
-CSV Logging + Annotated Image Saving
 
----
+```text
+RTSP Cameras
+    ↓
+Persistent RTSP Reader
+    ↓
+Latest Frame in Memory
+    ↓
+YOLO Fire & Smoke Detection
+    ↓
+Florence-2 Scene Captioning
+    ↓
+Sentence Similarity Verification
+    ↓
+PASS / REJECT Decision
+    ↓
+CSV Logging + Annotated Image Saving
+```
 
 ## Main Script
 
