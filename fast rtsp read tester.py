@@ -3,7 +3,7 @@
 #
 # !pip install ultralytics transformers sentence-transformers opencv-python-headless pillow psutil
 # !pip install ultralytics transformers==4.41.2 sentence-transformers opencv-python-headless pillow psutil
-# !pip install -q transformers einops timm flash_attn
+#
 # ============================================================================
 
 import os
