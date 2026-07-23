@@ -5,23 +5,46 @@ This project is a real-time Fire and Smoke Detection pipeline designed for RTSP 
 The pipeline keeps all RTSP streams alive in memory and processes the latest frame from each camera at a fixed interval.
 
 ## Pipeline
-
+## Pipeline
 
 ```text
 RTSP Cameras
-    ↓
+      │
+      ▼
 Persistent RTSP Reader
-    ↓
+      │
+      ▼
 Latest Frame in Memory
-    ↓
+      │
+      ▼
 YOLO Fire & Smoke Detection
-    ↓
+      │
+      ▼
+Confidence Threshold Check
+      │
+      ├──────────────► Below Threshold
+      │                    │
+      │                    ▼
+      │                Rejected
+      │
+      ▼
+Bounding Box Area Filtering
+      │
+      ├──────────────► Invalid Box
+      │                    │
+      │                    ▼
+      │                Rejected
+      │
+      ▼
 Florence-2 Scene Captioning
-    ↓
+      │
+      ▼
 Sentence Similarity Verification
-    ↓
+      │
+      ▼
 PASS / REJECT Decision
-    ↓
+      │
+      ▼
 CSV Logging + Annotated Image Saving
 ```
 
