@@ -68,7 +68,7 @@ psutil.cpu_percent(interval=None)
 # ---------------------------------------------------------------------------
 RTSP_STREAMS = [
  #Enter you rtsp streams 
-]
+ ]
 
 POLL_INTERVAL_SECONDS = 10
 YOLO_MODEL_PATH = "me (2).pt"
@@ -514,12 +514,10 @@ class SemanticPipeline:
                 img_name = f"cam{cam_idx+1}_{cls_name}_{timestamp_file}.jpg"
                 img_path = os.path.join(save_dir, img_name)
 
-                # Save annotated frame for PASS, raw frame for REJECT (hard negatives for fine-tuning)
-                if decision == "PASS":
-                    cv2.imwrite(img_path, annotated_frame)
-                else:
-                    cv2.imwrite(img_path, frame)
-                    logger.info(f"Saved raw frame to {REJECTED_DIR}: {img_path}")
+                # Save annotated frame for both PASS and REJECT decisions
+                cv2.imwrite(img_path, annotated_frame)
+                if decision == "REJECT":
+                    logger.info(f"Saved rejected frame with bounding box to {REJECTED_DIR}: {img_path}")
 
 # ---------------------------------------------------------------------------
 # Execution Entry Point
@@ -694,6 +692,9 @@ if __name__ == "__main__":
         logger.info("Processing interrupted by user.")
     finally:
         logger.info("Stopping all stream grabbers...")
+        for g in grabbers:
+            g.stop()
+        logger.info("Pipeline shut down cleanly.")er.info("Stopping all stream grabbers...")
         for g in grabbers:
             g.stop()
         logger.info("Pipeline shut down cleanly.")
