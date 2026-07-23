@@ -81,13 +81,14 @@ SMOKE_CONF_THRESH = 0.40
 MIN_BOX_AREA = 1500
 MAX_SMOKE_AREA_RATIO = 0.70
 
-SIMILARITY_THRESHOLD = 0.5
+SIMILARITY_THRESHOLD = 0.45
 
 FIRE_PHRASES = [
-    "visible flames", "orange flames", "yellow flames", "burning object",
+     "visible flames", "orange flames", "yellow flames", "burning object",
     "burning machinery", "active combustion", "fire spreading", "large fire",
     "small fire", "industrial fire", "open flames", "flames rising",
-    "fire outbreak", "burning material", "intense flames"
+    "fire outbreak", "burning material", "intense flames","fire",
+    "flame","campfire","bonfire","burning","burn","explosion","blaze"
 ]
 
 SMOKE_PHRASES = [
