@@ -7,6 +7,8 @@
 
 import os
 import sys
+# Configure FFmpeg RTSP flags before importing OpenCV (zero latency, TCP transport, no buffer, 5s timeout)
+os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = "rtsp_transport;tcp|fflags;nobuffer|max_delay;500000|timeout;5000000|stimeout;5000000"
 import csv
 import time
 import signal
